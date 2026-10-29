@@ -1,0 +1,206 @@
+    const mockQuestions = {
+        frontend: [
+            {
+                q: "Can you explain the difference between virtual DOM and real DOM in React, and how React optimizes rendering?",
+                hints: "Think about reconciliation, diffing algorithms, and batch updates."
+            },
+            {
+                q: "What is the purpose of useEffect clean-up function, and when exactly does it execute?",
+                hints: "Think about memory leaks, component unmounting, and dependency changes."
+            },
+            {
+                q: "How would you optimize performance in a React application that renders a very long list of items?",
+                hints: "Consider virtual lists, React.memo, useMemo, and avoiding unnecessary state updates."
+            }
+        ],
+        backend: [
+            {
+                q: "Explain how Node.js handles asynchronous operations despite being single-threaded.",
+                hints: "Mention the event loop, thread pool (libuv), non-blocking I/O, and microtask queue."
+            },
+            {
+                q: "What are database indexes, how do they speed up read operations, and what are the trade-offs involved?",
+                hints: "Talk about index types (B-Tree), write performance overhead, and memory usage."
+            },
+            {
+                q: "How do you secure a REST API against common vulnerabilities like SQL injection and cross-site scripting (XSS)?",
+                hints: "Discuss input validation, parameterized queries, ORMs, CORS, security headers, and sanitization."
+            }
+        ]
+    };
+
+    // Simulated Job Match Score Calculation
+    const handleCalculateMatch = (e) => {
+        e.preventDefault();
+        setMatchLoading(true);
+        setMatchResult(null);
+
+        setTimeout(() => {
+            const resumeWords = resumeSkills.toLowerCase().split(/[,\s]+/);
+            const reqSkills = ['react', 'javascript', 'tailwind', 'redux', 'typescript', 'jest', 'rest api'];
+            const matched = [];
+            const missing = [];
+
+            reqSkills.forEach(skill => {
+                if (resumeWords.some(w => w.includes(skill) || skill.includes(w))) {
+                    matched.push(skill);
+                } else {
+                    missing.push(skill);
+                }
+            });
+
+            const scorePercent = Math.round(50 + (matched.length / reqSkills.length) * 45);
+
+            setMatchResult({
+                score: scorePercent,
+                matched: matched.map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+                missing: missing.map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+                roadmap: {
+                    skills: missing.map(s => s.charAt(0).toUpperCase() + s.slice(1)),
+                    courses: [
+                        { name: 'loda camp', platform: 'Udemy', link: 'https://www.udemy.com' },
+                        { name: 'Redux Toolkit Fundamentals', platform: 'YouTube', link: 'https://www.youtube.com' },
+                        { name: 'Mastering TypeScript & Advanced Types', platform: 'Udemy', link: 'https://www.udemy.com' }
+                    ]
+                }
+            });
+            setMatchLoading(false);
+        }, 1200);
+    };
+
+    // Simulated Resume Enhancer
+    const handleEnhanceResume = (e) => {
+        e.preventDefault();
+        if (!originalBullet.trim()) return;
+
+        setEnhancingLoading(true);
+        setEnhancedBullets(null);
+
+        setTimeout(() => {
+            setEnhancedBullets([
+                "Architected and deployed high-performance React dashboard components, decreasing user interaction latency by 28 percent.",
+                "Engineered responsive dashboard modules in React, improving cross-device usability metrics and data rendering efficiency by 15 percent.",
+                "Designed and integrated clean React structures with modular components, facilitating scalable state management and code reusability."
+            ]);
+            setEnhancingLoading(false);
+        }, 1000);
+    };
+
+    // Simulated Mock Interview Buddy
+    const startInterview = () => {
+        setInterviewStarted(true);
+        setInterviewQuestionIndex(0);
+        setInterviewReport(null);
+        setInterviewMessages([
+            {
+                sender: 'ai',
+                text: `Welcome to your simulated technical interview. I will act as the interviewer and ask you 3 questions. Let us start. Here is your first question: ${mockQuestions[interviewRole][0].q}`
+            }
+        ]);
+    };
+
+    const handleSendAnswer = (e) => {
+        e.preventDefault();
+        if (!currentAnswer.trim() || interviewLoading) return;
+
+        const userAns = currentAnswer;
+        setInterviewMessages(prev => [...prev, { sender: 'user', text: userAns }]);
+        setCurrentAnswer('');
+        setInterviewLoading(true);
+
+        setTimeout(() => {
+            const nextIndex = interviewQuestionIndex + 1;
+
+            if (nextIndex < mockQuestions[interviewRole].length) {
+                setInterviewQuestionIndex(nextIndex);
+                setInterviewMessages(prev => [
+                    ...prev,
+                    {
+                        sender: 'ai',
+                        text: `Thank you for your answer. Moving to question ${nextIndex + 1}: ${mockQuestions[interviewRole][nextIndex].q}`
+                    }
+                ]);
+            } else {
+                setInterviewStarted(false);
+                setInterviewReport({
+                    score: 8.5,
+                    feedback: "You demonstrated solid fundamental knowledge of rendering behavior and life cycle management. For performance questions, try to explicitly mention virtualization techniques and hook optimization strategies.",
+                    answersReport: [
+                        { q: mockQuestions[interviewRole][0].q, rating: "Good", tip: "Ensure you mention reconciliation algorithm complexities next time." },
+                        { q: mockQuestions[interviewRole][1].q, rating: "Excellent", tip: "Clear understanding of effect unmounting mechanisms." },
+                        { q: mockQuestions[interviewRole][2].q, rating: "Needs detail", tip: "Mention dynamic libraries like react-window or react-virtualized." }
+                    ]
+                });
+            }
+            setInterviewLoading(false);
+        }, 1500);
+    };
+
+    // Simulated ATS Scanner
+    const handleAtsScan = (e) => {
+        e.preventDefault();
+        setAtsLoading(true);
+        setAtsResult(null);
+
+        setTimeout(() => {
+            setAtsResult({
+                score: 76,
+                breakdown: {
+                    formatting: { status: 'pass', text: 'No complex tables, multi-column divisions, or non-standard symbols detected.' },
+                    headings: { status: 'pass', text: 'Standard headings found (Experience, Skills).' },
+                    wordCount: { status: 'warning', text: 'Your resume is around 180 words. We recommend expanding detail to at least 300 words.' },
+                    keywordDensity: { status: 'warning', text: 'Identified core technologies but missed primary operational keywords like "CI/CD", "Testing", "Unit Tests".' }
+                },
+                optimizationTips: [
+                    "Incorporate specific metrics and achievements rather than general responsibility statements.",
+                    "Use active verbs like Developed, Designed, Automated instead of passive verbs.",
+                    "Incorporate missing core skills inside your Experience bullet points, not just in the Skills list."
+                ]
+            });
+            setAtsLoading(false);
+        }, 1200);
+    };
+
+    // Simulated Job Search
+    const handleJobSearch = (e) => {
+        e.preventDefault();
+        setSearchLoading(true);
+        setJobsList(null);
+
+        setTimeout(() => {
+            setJobsList([
+                {
+                    title: "Frontend Engineer",
+                    company: "TechFlow Systems",
+                    location: "Remote / Bengaluru",
+                    salary: "$80k - $100k",
+                    matchScore: 92,
+                    matchingSkills: ["React", "JavaScript", "HTML", "CSS", "Git"],
+                    description: "Looking for an engineer to build highly optimized React web apps and internal admin tools."
+                },
+                {
+                    title: "Software Engineer (UI / Frontend)",
+                    company: "SaaSify Labs",
+                    location: "Hybrid / Pune",
+                    salary: "$70k - $90k",
+                    matchScore: 85,
+                    matchingSkills: ["React", "JavaScript", "CSS", "REST APIs"],
+                    description: "Join our UI team to craft elegant interfaces and integrate RESTful backend integrations."
+                },
+                {
+                    title: "React Web Developer",
+                    company: "Apex Digital Solutions",
+                    location: "On-site / Mumbai",
+                    salary: "$60k - $80k",
+                    matchScore: 78,
+                    matchingSkills: ["React", "JavaScript", "HTML", "CSS"],
+                    description: "Fast-growing agency building custom business websites and modern web-based products."
+                }
+            ]);
+            setSearchLoading(false);
+        }, 1000);
+    };
+
+    const toggleFaq = (index) => {
+        setOpenFaqIndex(openFaqIndex === index ? null : index);
+    };

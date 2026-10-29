@@ -1,0 +1,11 @@
+you upload your resume and specify the job role you are applying for - ai will analyze it and find the gaps in your resume accordind to that job 
+                                                                        and tell the gaps and your resume match score, and suggest the roadmap to 
+                                                                       fill the gaps , the roadmap includes  learning path with course names 
+                                                                       (youtube and udemy videos) , projects to work on , practice problems 
+                                                                      
+                                                                       when user uploads the resume and Jd, then it has to choose wether he wants to prepare for
+                                                                        the interview or just want to check the resume match score based on the jd ,
+                                                                        
+                                                                        or he wants a proper roadmap plan to prepare for Job , 
+                                                                        or just wants to find the gaps in his resume for particular job , 
+                                                                        or wants to find job based on his resume , skills
