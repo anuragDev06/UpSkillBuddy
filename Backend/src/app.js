@@ -7,10 +7,21 @@ const cors = require('cors');
 const app = express();
 
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',')
+    : ['http://localhost:5173'];
+
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g., mobile apps, Postman, curl)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`CORS policy: Origin ${origin} not allowed`));
+    },
     credentials: true
-}))
+}));
 app.use(express.json());
 app.use(cookieParser());
 
