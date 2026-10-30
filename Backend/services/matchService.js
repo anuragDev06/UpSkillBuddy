@@ -6,7 +6,7 @@ const { extractTextFromFile } = require('./atsService');
 // ─────────────────────────────────────────────────────────────────────────────
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-const MODEL = 'gemini-3.5-flash-lite';
+const MODEL = 'gemini-3.6-flash';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prompt — instructs Gemini to return strict JSON matching the frontend shape

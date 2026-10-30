@@ -123,7 +123,7 @@ async function calculateAtsScore(resumeText) {
         return buildEmptyResult('No readable text content found in resume.');
     }
 
-    const model = 'gemini-3.5-flash-lite';
+    const model = 'gemini-3.6-flash';
 
     const response = await genAI.models.generateContent({
         model,
