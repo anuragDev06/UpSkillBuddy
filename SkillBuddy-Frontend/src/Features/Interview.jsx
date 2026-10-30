@@ -1,22 +1,31 @@
 import React, { useState, useRef, useCallback } from "react";
 import FeatureAccessLimiter from "../components/FeatureAccessLimiter/FeatureAccessLimiter";
+import { startInterviewSession, evaluateInterviewAnswer } from "../services/ats.api.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VALID_EXTENSIONS = ["pdf", "docx", "txt"];
 const MAX_SIZE_MB = 5;
 
 const INTERVIEW_TYPES = [
-    { key: "technical",    label: "Technical",      emoji: "💻", desc: "DSA, system design, coding" },
-    { key: "behavioral",   label: "Behavioral",     emoji: "🧠", desc: "Situational, culture fit" },
-    { key: "hr",           label: "HR Round",       emoji: "🤝", desc: "Background, goals, salary" },
-    { key: "mixed",        label: "Mixed Round",    emoji: "⚡", desc: "Technical + behavioral blend" },
+    { key: "technical",  label: "Technical",    emoji: "💻", desc: "DSA, system design, coding" },
+    { key: "behavioral", label: "Behavioral",   emoji: "🧠", desc: "Situational, culture fit" },
+    { key: "hr",         label: "HR Round",     emoji: "🤝", desc: "Background, goals, salary" },
+    { key: "mixed",      label: "Mixed Round",  emoji: "⚡", desc: "Technical + behavioral blend" },
 ];
 
 const DIFFICULTY_LEVELS = [
-    { key: "entry",    label: "Entry Level",   color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
-    { key: "mid",      label: "Mid Level",     color: "text-blue-600 bg-blue-50 border-blue-200" },
-    { key: "senior",   label: "Senior Level",  color: "text-violet-600 bg-violet-50 border-violet-200" },
+    { key: "entry",  label: "Entry Level",  color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+    { key: "mid",    label: "Mid Level",    color: "text-blue-600 bg-blue-50 border-blue-200" },
+    { key: "senior", label: "Senior Level", color: "text-violet-600 bg-violet-50 border-violet-200" },
 ];
+
+const GRADE_COLORS = {
+    A: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-300" },
+    B: { bg: "bg-blue-100",    text: "text-blue-700",    border: "border-blue-300" },
+    C: { bg: "bg-amber-100",   text: "text-amber-700",   border: "border-amber-300" },
+    D: { bg: "bg-orange-100",  text: "text-orange-700",  border: "border-orange-300" },
+    F: { bg: "bg-red-100",     text: "text-red-700",     border: "border-red-300" },
+};
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 function validateFile(file) {
@@ -54,8 +63,8 @@ function ColumnCard({ icon, iconBg, title, subtitle, required, children }) {
 
 function FileDropzone({ file, onFile, onClear, error, isDragging, onDragOver, onDragLeave, onDrop, inputId, inputRef, accentColor = "blue" }) {
     const colors = {
-        blue:   { ring: "border-blue-500 bg-blue-50/60", icon: "bg-blue-50 text-blue-600", btn: "bg-blue-600 hover:bg-blue-700" },
-        green:  { ring: "border-emerald-500 bg-emerald-50/60", icon: "bg-emerald-50 text-emerald-600", btn: "bg-emerald-600 hover:bg-emerald-600" },
+        blue:  { ring: "border-blue-500 bg-blue-50/60", icon: "bg-blue-50 text-blue-600", btn: "bg-blue-600 hover:bg-blue-700" },
+        green: { ring: "border-emerald-500 bg-emerald-50/60", icon: "bg-emerald-50 text-emerald-600", btn: "bg-emerald-600 hover:bg-emerald-600" },
     };
     const c = colors[accentColor];
 
@@ -86,8 +95,7 @@ function FileDropzone({ file, onFile, onClear, error, isDragging, onDragOver, on
                             <p className="text-sm font-bold text-slate-800 truncate max-w-[160px] mx-auto">{file.name}</p>
                             <p className="text-xs text-slate-400 mt-0.5">{(file.size / 1024).toFixed(1)} KB · Ready</p>
                         </div>
-                        <button type="button" onClick={onClear}
-                            className="text-xs font-semibold text-rose-600 hover:text-rose-700 underline cursor-pointer">
+                        <button type="button" onClick={onClear} className="text-xs font-semibold text-rose-600 hover:text-rose-700 underline cursor-pointer">
                             Remove file
                         </button>
                     </div>
@@ -124,6 +132,335 @@ function FileDropzone({ file, onFile, onClear, error, isDragging, onDragOver, on
     );
 }
 
+// ─── Interview Session UI ─────────────────────────────────────────────────────
+function InterviewSession({ session, onReset }) {
+    const questions = session?.data?.questions || [];
+    const totalQuestions = questions.length;
+
+    const [currentIndex, setCurrentIndex]     = useState(0);
+    const [answer, setAnswer]                 = useState("");
+    const [isEvaluating, setIsEvaluating]     = useState(false);
+    const [evalError, setEvalError]           = useState("");
+    const [evaluations, setEvaluations]       = useState({}); // { [questionIndex]: evaluation }
+    const [showHint, setShowHint]             = useState(false);
+    const [interviewDone, setInterviewDone]   = useState(false);
+
+    const currentQuestion = questions[currentIndex];
+    const currentEval     = evaluations[currentIndex];
+    const answeredCount   = Object.keys(evaluations).length;
+
+    const handleSubmitAnswer = async () => {
+        if (!answer.trim()) { setEvalError("Please write your answer before submitting."); return; }
+        setEvalError("");
+        setIsEvaluating(true);
+        try {
+            const result = await evaluateInterviewAnswer(
+                currentQuestion.question,
+                answer,
+                currentQuestion.type,
+                currentQuestion.difficulty
+            );
+            setEvaluations(prev => ({ ...prev, [currentIndex]: result.data }));
+        } catch (err) {
+            setEvalError(err.response?.data?.message || "Failed to evaluate. Please try again.");
+        } finally {
+            setIsEvaluating(false);
+        }
+    };
+
+    const handleNext = () => {
+        if (currentIndex < totalQuestions - 1) {
+            setCurrentIndex(i => i + 1);
+            setAnswer("");
+            setShowHint(false);
+            setEvalError("");
+        } else {
+            setInterviewDone(true);
+        }
+    };
+
+    const avgScore = answeredCount > 0
+        ? Math.round(Object.values(evaluations).reduce((s, e) => s + (e?.score || 0), 0) / answeredCount)
+        : 0;
+
+    // ── Results Screen ─────────────────────────────────────────────────────────
+    if (interviewDone) {
+        const gradeForScore = (s) => s >= 9 ? "A" : s >= 7 ? "B" : s >= 5 ? "C" : s >= 3 ? "D" : "F";
+        const overallGrade = gradeForScore(avgScore);
+        const gc = GRADE_COLORS[overallGrade] || GRADE_COLORS.F;
+
+        return (
+            <div className="max-w-4xl mx-auto p-4 sm:p-8 space-y-8 animate-fade-in">
+                {/* Header */}
+                <div className="text-center">
+                    <div className="w-20 h-20 mx-auto rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center mb-4 shadow-lg">
+                        <svg className="w-10 h-10 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                        </svg>
+                    </div>
+                    <h2 className="text-3xl font-extrabold text-slate-900">Interview Complete! 🎉</h2>
+                    <p className="text-slate-500 mt-2">Here's your performance summary across all {totalQuestions} questions.</p>
+                </div>
+
+                {/* Score summary */}
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center shadow-sm">
+                        <p className="text-3xl font-extrabold text-indigo-600">{avgScore}<span className="text-base text-slate-400">/10</span></p>
+                        <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wide">Avg Score</p>
+                    </div>
+                    <div className={`border rounded-2xl p-5 text-center shadow-sm ${gc.bg} ${gc.border}`}>
+                        <p className={`text-3xl font-extrabold ${gc.text}`}>{overallGrade}</p>
+                        <p className={`text-xs font-semibold mt-1 uppercase tracking-wide ${gc.text} opacity-70`}>Overall Grade</p>
+                    </div>
+                    <div className="bg-white border border-slate-200 rounded-2xl p-5 text-center shadow-sm">
+                        <p className="text-3xl font-extrabold text-emerald-600">{answeredCount}<span className="text-base text-slate-400">/{totalQuestions}</span></p>
+                        <p className="text-xs font-semibold text-slate-500 mt-1 uppercase tracking-wide">Answered</p>
+                    </div>
+                </div>
+
+                {/* Per-question breakdown */}
+                <div className="space-y-4">
+                    <h3 className="text-base font-bold text-slate-800">Question-by-Question Breakdown</h3>
+                    {questions.map((q, i) => {
+                        const ev = evaluations[i];
+                        const g  = ev ? (GRADE_COLORS[ev.grade] || GRADE_COLORS.F) : null;
+                        return (
+                            <div key={i} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                        <span className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">{i + 1}</span>
+                                        <p className="text-sm font-semibold text-slate-800 leading-snug">{q.question}</p>
+                                    </div>
+                                    {ev && (
+                                        <span className={`px-3 py-1 rounded-xl text-xs font-bold flex-shrink-0 border ${g.bg} ${g.text} ${g.border}`}>
+                                            {ev.score}/10 · {ev.grade}
+                                        </span>
+                                    )}
+                                </div>
+                                {ev && (
+                                    <div className="pl-10 space-y-2">
+                                        <p className="text-xs text-slate-600">{ev.feedback}</p>
+                                        {ev.modelAnswer && (
+                                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1">Model Answer</p>
+                                                <p className="text-xs text-slate-700 leading-relaxed">{ev.modelAnswer}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                {!ev && (
+                                    <p className="pl-10 text-xs text-slate-400 italic">Not answered</p>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+
+                <div className="flex justify-center pt-2">
+                    <button type="button" onClick={onReset}
+                        className="px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold text-sm transition-all duration-150 shadow-lg cursor-pointer flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Start New Interview
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // ── Active Question Screen ─────────────────────────────────────────────────
+    const progress = ((currentIndex) / totalQuestions) * 100;
+    const gc2 = currentEval ? (GRADE_COLORS[currentEval.grade] || GRADE_COLORS.F) : null;
+
+    return (
+        <div className="max-w-3xl mx-auto p-4 sm:p-8 space-y-6 animate-fade-in">
+            {/* Progress bar */}
+            <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
+                    <span>Question {currentIndex + 1} of {totalQuestions}</span>
+                    <span className="text-indigo-600">{answeredCount} answered</span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                        className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full transition-all duration-500"
+                        style={{ width: `${progress}%` }}
+                    />
+                </div>
+            </div>
+
+            {/* Question card */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+                <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 text-sm font-bold flex items-center justify-center flex-shrink-0">
+                        {currentIndex + 1}
+                    </div>
+                    <div className="flex-1">
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            <span className="text-[11px] font-bold text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                {currentQuestion?.type || "technical"}
+                            </span>
+                            <span className="text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-100 px-2 py-0.5 rounded-full uppercase tracking-wide">
+                                {currentQuestion?.difficulty || "mid"}
+                            </span>
+                        </div>
+                        <p className="text-base font-semibold text-slate-900 leading-relaxed">
+                            {currentQuestion?.question}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Hint toggle */}
+                {currentQuestion?.hint && !currentEval && (
+                    <div>
+                        <button type="button" onClick={() => setShowHint(h => !h)}
+                            className="text-xs font-semibold text-amber-600 hover:text-amber-700 underline cursor-pointer flex items-center gap-1">
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                            </svg>
+                            {showHint ? "Hide Hint" : "Show Hint"}
+                        </button>
+                        {showHint && (
+                            <div className="mt-2 px-4 py-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-800 leading-relaxed">
+                                💡 {currentQuestion.hint}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Answer area — shown only if not yet evaluated */}
+                {!currentEval && (
+                    <div className="space-y-3">
+                        <label className="text-xs font-bold text-slate-600 uppercase tracking-wide">Your Answer</label>
+                        <textarea
+                            rows={6}
+                            value={answer}
+                            onChange={(e) => { setAnswer(e.target.value); if (evalError) setEvalError(""); }}
+                            disabled={isEvaluating}
+                            placeholder="Type your answer here… Be specific, use examples, and explain your thinking."
+                            className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm text-slate-800 focus:bg-white outline-none focus:border-indigo-400 transition-colors resize-none disabled:opacity-60"
+                        />
+                        <div className="flex items-center justify-between">
+                            <p className="text-[11px] text-slate-400">
+                                {answer.trim() ? `${answer.trim().split(/\s+/).filter(Boolean).length} words` : "Write a detailed answer"}
+                            </p>
+                            {evalError && (
+                                <p className="text-[11px] font-medium text-rose-600">{evalError}</p>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={handleSubmitAnswer}
+                            disabled={isEvaluating || !answer.trim()}
+                            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold text-sm transition-all duration-150 shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isEvaluating ? (
+                                <>
+                                    <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                    </svg>
+                                    Evaluating your answer…
+                                </>
+                            ) : (
+                                <>
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    Submit Answer
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+
+                {/* Evaluation result */}
+                {currentEval && gc2 && (
+                    <div className="space-y-4 animate-fade-in">
+                        {/* Score badge */}
+                        <div className={`flex items-center gap-4 p-4 rounded-2xl border ${gc2.bg} ${gc2.border}`}>
+                            <div className={`w-14 h-14 rounded-xl flex flex-col items-center justify-center border-2 ${gc2.border} ${gc2.bg} flex-shrink-0`}>
+                                <span className={`text-xl font-extrabold leading-none ${gc2.text}`}>{currentEval.grade}</span>
+                                <span className={`text-[10px] font-bold ${gc2.text} opacity-70`}>{currentEval.score}/10</span>
+                            </div>
+                            <p className={`text-sm font-medium leading-relaxed ${gc2.text}`}>{currentEval.feedback}</p>
+                        </div>
+
+                        {/* Strengths */}
+                        {currentEval.strengths?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide mb-2">✅ Strengths</p>
+                                <ul className="space-y-1">
+                                    {currentEval.strengths.map((s, i) => (
+                                        <li key={i} className="text-xs text-slate-700 flex items-start gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0 mt-1.5" />
+                                            {s}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Improvements */}
+                        {currentEval.improvements?.length > 0 && (
+                            <div>
+                                <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">⚡ Areas to Improve</p>
+                                <ul className="space-y-1">
+                                    {currentEval.improvements.map((s, i) => (
+                                        <li key={i} className="text-xs text-slate-700 flex items-start gap-2">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 mt-1.5" />
+                                            {s}
+                                        </li>
+                                    ))}
+                                </ul>
+                            </div>
+                        )}
+
+                        {/* Model answer */}
+                        {currentEval.modelAnswer && (
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-2">💡 Model Answer</p>
+                                <p className="text-xs text-slate-700 leading-relaxed">{currentEval.modelAnswer}</p>
+                            </div>
+                        )}
+
+                        {/* Next button */}
+                        <button
+                            type="button"
+                            onClick={handleNext}
+                            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white rounded-xl font-bold text-sm transition-all duration-150 shadow-md cursor-pointer flex items-center justify-center gap-2"
+                        >
+                            {currentIndex < totalQuestions - 1 ? (
+                                <>
+                                    Next Question
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                    </svg>
+                                </>
+                            ) : (
+                                <>
+                                    View Results
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z" />
+                                    </svg>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            {/* Quit button */}
+            <div className="flex justify-center">
+                <button type="button" onClick={onReset}
+                    className="text-xs font-semibold text-slate-400 hover:text-slate-600 underline cursor-pointer transition-colors">
+                    Quit & Start Over
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Interview() {
     // ── Resume ──
@@ -133,7 +470,7 @@ export default function Interview() {
     const resumeRef = useRef(null);
 
     // ── Job Description ──
-    const [jdMode, setJdMode]               = useState("text"); // "text" | "file"
+    const [jdMode, setJdMode]               = useState("text");
     const [jdText, setJdText]               = useState("");
     const [jdFile, setJdFile]               = useState(null);
     const [jdTextError, setJdTextError]     = useState("");
@@ -150,7 +487,7 @@ export default function Interview() {
     // ── Submit ──
     const [isStarting, setIsStarting]       = useState(false);
     const [submitError, setSubmitError]     = useState("");
-    const [sessionReady, setSessionReady]   = useState(false);
+    const [session, setSession]             = useState(null);
 
     // ── Resume handlers ──
     const handleResumeFile = useCallback((file) => {
@@ -191,26 +528,14 @@ export default function Interview() {
 
         setSubmitError(""); setIsStarting(true);
         try {
-            // ── API CALL PLACEHOLDER ──────────────────────────────────────────
-            // TODO: Replace with your Mock Interview API call.
-            //
-            // const formData = new FormData();
-            // formData.append("resume", resumeFile);
-            // if (jdMode === "file") formData.append("jobDescription", jdFile);
-            // else formData.append("jobDescriptionText", jdText);
-            // formData.append("companyName", companyName);
-            // formData.append("interviewType", interviewType);
-            // formData.append("difficulty", difficulty);
-            // formData.append("questionCount", questionCount);
-            //
-            // const response = await axios.post("/api/interview/start", formData, {
-            //     headers: { "Content-Type": "multipart/form-data" },
-            // });
-            // setSessionReady(response.data);
-            // ─────────────────────────────────────────────────────────────────
-
-            await new Promise((r) => setTimeout(r, 2000)); // remove once API is live
-            setSubmitError("API not connected yet. Plug in your Mock Interview API to activate.");
+            const result = await startInterviewSession(
+                resumeFile,
+                jdMode,
+                jdMode === "text" ? jdText : undefined,
+                jdMode === "file" ? jdFile : undefined,
+                { interviewType, difficulty, questionCount, companyName }
+            );
+            setSession(result);
         } catch (err) {
             setSubmitError(err.response?.data?.message || "Failed to start session. Please try again.");
         } finally {
@@ -222,8 +547,17 @@ export default function Interview() {
         setResumeFile(null); setResumeError("");
         setJdText(""); setJdFile(null); setJdTextError(""); setJdFileError("");
         setCompanyName(""); setInterviewType("technical"); setDifficulty("mid"); setQuestionCount(5);
-        setSubmitError(""); setSessionReady(false);
+        setSubmitError(""); setSession(null);
     };
+
+    // ── If session is active, show the Interview Session UI ──
+    if (session) {
+        return (
+            <FeatureAccessLimiter featureName="Mock Interview">
+                <InterviewSession session={session} onReset={handleReset} />
+            </FeatureAccessLimiter>
+        );
+    }
 
     return (
         <FeatureAccessLimiter featureName="Mock Interview">
@@ -249,10 +583,10 @@ export default function Interview() {
                 {/* ── Progress Steps ── */}
                 <div className="flex items-center gap-0 overflow-x-auto">
                     {[
-                        { n: "1", label: "Upload Resume",       done: !!resumeFile },
-                        { n: "2", label: "Job Description",     done: jdMode === "text" ? jdText.trim().length > 20 : !!jdFile },
-                        { n: "3", label: "Configure Session",   done: true },
-                        { n: "4", label: "Start Interview",     done: false },
+                        { n: "1", label: "Upload Resume",     done: !!resumeFile },
+                        { n: "2", label: "Job Description",   done: jdMode === "text" ? jdText.trim().length > 20 : !!jdFile },
+                        { n: "3", label: "Configure Session", done: true },
+                        { n: "4", label: "Start Interview",   done: false },
                     ].map((step, i, arr) => (
                         <React.Fragment key={i}>
                             <div className="flex items-center gap-2 flex-shrink-0">
@@ -306,8 +640,6 @@ export default function Interview() {
                             inputRef={resumeRef}
                             accentColor="blue"
                         />
-
-                        {/* Tip */}
                         <div className="flex items-start gap-2 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-xl mt-1">
                             <svg className="w-3.5 h-3.5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -331,7 +663,6 @@ export default function Interview() {
                             </svg>
                         }
                     >
-                        {/* Mode toggle */}
                         <div className="flex bg-slate-100 p-1 rounded-xl">
                             <button type="button" onClick={() => { setJdMode("text"); setJdTextError(""); setJdFileError(""); }}
                                 className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all duration-150 cursor-pointer ${jdMode === "text" ? "bg-white text-violet-600 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}>
@@ -423,14 +754,6 @@ export default function Interview() {
                                         className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-800 focus:bg-white outline-none focus:border-amber-400 transition-colors"
                                     />
                                 </div>
-                                {companyName && (
-                                    <p className="text-[11px] text-amber-600 flex items-center gap-1">
-                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                        Questions will be tailored to {companyName}'s culture
-                                    </p>
-                                )}
                             </div>
 
                             {/* Interview Type */}
@@ -488,11 +811,7 @@ export default function Interview() {
                                     </span>
                                 </div>
                                 <input
-                                    type="range"
-                                    min={3}
-                                    max={15}
-                                    step={1}
-                                    value={questionCount}
+                                    type="range" min={3} max={15} step={1} value={questionCount}
                                     onChange={(e) => setQuestionCount(Number(e.target.value))}
                                     className="w-full h-2 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
                                 />
@@ -505,9 +824,9 @@ export default function Interview() {
                     </ColumnCard>
                 </div>
 
-                {/* ── Session Summary Card (shows when ready) ── */}
+                {/* ── Session Summary Card ── */}
                 {isReady && (
-                    <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fade-in">
+                    <div className="bg-gradient-to-r from-indigo-50 to-violet-50 border border-indigo-200 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 bg-indigo-100 text-indigo-600 rounded-xl flex items-center justify-center flex-shrink-0">
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
@@ -537,10 +856,10 @@ export default function Interview() {
                     </div>
                 )}
 
-                {/* ── Global error ── */}
+                {/* ── Error ── */}
                 {submitError && (
-                    <div className="flex items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm text-amber-800">
-                        <svg className="w-5 h-5 flex-shrink-0 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 rounded-2xl text-sm text-rose-800">
+                        <svg className="w-5 h-5 flex-shrink-0 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                         <span>{submitError}</span>
