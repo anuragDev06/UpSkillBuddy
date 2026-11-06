@@ -1,5 +1,7 @@
 const express = require('express');
 const multer = require('multer');
+const { authUser } = require('../middlewares/auth.middleware');
+const { aiRateLimiter } = require('../middlewares/aiRateLimiter');
 const { matchResumeController } = require('../controllers/matchController');
 
 const router = express.Router();
@@ -14,6 +16,8 @@ const upload = multer({
 // Fields: resume (file, required), jobDescription (file, optional), jobDescriptionText (text, optional)
 router.post(
     '/analyze',
+    authUser,
+    aiRateLimiter,
     upload.fields([
         { name: 'resume',          maxCount: 1 },
         { name: 'jobDescription',  maxCount: 1 },

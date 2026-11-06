@@ -30,3 +30,12 @@ Thumbs.db
 # ── Vite / ESLint cache ───────────────────────────────────────────────────────
 .vite/
 .eslintcache
+
+# ── Local test / sample files ─────────────────────────────────────────────────
+test/
+**/test/
+**/__tests__/
+*.test.js
+*.test.jsx
+*.spec.js
+*.spec.jsx

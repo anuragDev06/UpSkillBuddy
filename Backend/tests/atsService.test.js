@@ -1,3 +1,34 @@
+jest.mock('@google/genai', () => {
+    const mockGenerateContent = jest.fn().mockResolvedValue({
+        text: JSON.stringify({
+            totalScore: 88,
+            status: 'Good',
+            summary: 'Strong candidate with clear technical and leadership experience.',
+            breakdown: {
+                contactInfo: { score: 15, details: ['Includes contact information.'] },
+                sections: { score: 25, details: ['Clear sections.'] },
+                skills: { score: 22, count: 12 },
+                impactAndVerbs: { score: 16, verbsCount: 8, metricsCount: 5 },
+                formatting: { score: 15, details: ['Well-structured formatting.'] },
+            },
+            skillsFound: {
+                technical: ['react', 'node.js'],
+                soft: ['leadership', 'communication'],
+            },
+            strengths: ['Strong technical depth', 'Good delivery metrics'],
+            improvements: ['Add more explicit cloud projects'],
+        }),
+    });
+
+    return {
+        GoogleGenAI: jest.fn().mockImplementation(() => ({
+            models: {
+                generateContent: mockGenerateContent,
+            },
+        })),
+    };
+});
+
 const { calculateAtsScore, extractTextFromFile } = require('../services/atsService');
 
 describe('ATS Service - Unit Tests', () => {
@@ -19,7 +50,6 @@ describe('ATS Service - Unit Tests', () => {
         });
 
         test('should correctly parse and score a comprehensive high-quality resume', () => {
-            // Generate a realistic resume (> 200 words) with contact info, sections, skills, and metrics
             const sampleResume = `
             John Doe
             Email: john.doe@example.com | Phone: +1-555-123-4567
@@ -60,25 +90,18 @@ describe('ATS Service - Unit Tests', () => {
 
             expect(result.totalScore).toBeGreaterThanOrEqual(70);
             expect(['Good', 'Excellent']).toContain(result.status);
-
-            // Verify breakdown structure
             expect(result.breakdown).toHaveProperty('contactInfo');
-            expect(result.breakdown.contactInfo.score).toBe(15); // Email + Phone + LinkedIn + Portfolio
-
+            expect(result.breakdown.contactInfo.score).toBe(15);
             expect(result.breakdown).toHaveProperty('sections');
-            expect(result.breakdown.sections.score).toBe(25); // Summary, Experience, Education, Skills, Projects
-
+            expect(result.breakdown.sections.score).toBe(25);
             expect(result.breakdown).toHaveProperty('skills');
             expect(result.breakdown.skills.score).toBeGreaterThan(0);
             expect(result.skillsFound.technical).toContain('react');
             expect(result.skillsFound.technical).toContain('node.js');
-
             expect(result.breakdown).toHaveProperty('impactAndVerbs');
             expect(result.breakdown.impactAndVerbs.score).toBeGreaterThan(0);
-
             expect(result.breakdown).toHaveProperty('formatting');
             expect(result.breakdown.formatting.score).toBe(15);
-
             expect(result.strengths.length).toBeGreaterThan(0);
         });
 

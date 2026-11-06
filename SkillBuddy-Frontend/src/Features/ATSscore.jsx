@@ -155,7 +155,7 @@ export default function ATSscore() {
                                         : "text-slate-600 hover:text-slate-900"
                                 }`}
                             >
-                                ✍️ Paste Plain Text
+                                 Paste Plain Text
                             </button>
                         </div>
 
