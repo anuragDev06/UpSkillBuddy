@@ -1,4 +1,6 @@
 const atsService = require('../services/atsService');
+const mongoose = require('mongoose');
+const ResumeScan = require('../models/resumeScan.model');
 
 /**
  * Controller to process resume file or text input and return ATS score evaluation
@@ -16,7 +18,9 @@ async function scanResumeController(req, res) {
             });
         }
 
-        const validation = await atsService.validateResumeInput(req.file, rawResumeText);
+        const validation = typeof atsService.validateResumeInput === 'function'
+            ? await atsService.validateResumeInput(req.file, rawResumeText)
+            : { status: 'VALID_RESUME', normalizedText: rawResumeText };
 
         if (validation.status !== 'VALID_RESUME') {
             return res.status(validation.statusCode || 422).json({
@@ -27,6 +31,27 @@ async function scanResumeController(req, res) {
         }
 
         const analysis = await atsService.calculateAtsScore(validation.normalizedText || rawResumeText);
+
+        // Persist scan history for authenticated user
+        const userId = req.user?.id || req.user?._id;
+        if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+            try {
+                await ResumeScan.create({
+                    userId,
+                    fileName: req.file ? req.file.originalname : 'Pasted_Resume.txt',
+                    fileSize: req.file ? req.file.size : Buffer.byteLength(rawResumeText, 'utf8'),
+                    atsScore: typeof analysis.totalScore === 'number' ? analysis.totalScore : 0,
+                    status: analysis.status || 'Average',
+                    summary: analysis.summary || '',
+                    breakdown: analysis.breakdown || {},
+                    skillsFound: analysis.skillsFound || { technical: [], soft: [] },
+                    strengths: analysis.strengths || [],
+                    improvements: analysis.improvements || [],
+                });
+            } catch (saveErr) {
+                console.error('Failed to save ResumeScan to database:', saveErr);
+            }
+        }
 
         return res.status(200).json({
             success: true,

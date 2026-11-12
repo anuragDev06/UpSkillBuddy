@@ -91,21 +91,46 @@ export async function startInterviewSession(resumeFile, jdMode, jdText, jdFile, 
 }
 
 /**
- * Evaluates a single interview answer with Gemini.
+ * Evaluates a single interview answer with Gemini and syncs progress to session in DB.
  *
- * @param {string} question     - The question that was asked
- * @param {string} answer       - The candidate's answer
- * @param {string} questionType - "technical" | "behavioral" | "hr"
- * @param {string} difficulty   - "entry" | "mid" | "senior"
+ * @param {string} question      - The question that was asked
+ * @param {string} answer        - The candidate's answer
+ * @param {string} questionType  - "technical" | "behavioral" | "hr"
+ * @param {string} difficulty    - "entry" | "mid" | "senior"
+ * @param {string} [sessionId]   - Optional ID of the interview session
+ * @param {number} [questionIndex] - Index of the question being answered
  * @returns {Promise<Object>} Backend response with score, grade, feedback, modelAnswer
  */
-export async function evaluateInterviewAnswer(question, answer, questionType, difficulty) {
-    const response = await api.post('/api/interview/evaluate', {
+export async function evaluateInterviewAnswer(question, answer, questionType, difficulty, sessionId, questionIndex) {
+    const payload = {
         question,
         answer,
         questionType,
         difficulty,
-    });
+    };
+    if (sessionId) payload.sessionId = sessionId;
+    if (typeof questionIndex === 'number') payload.questionIndex = questionIndex;
+
+    const response = await api.post('/api/interview/evaluate', payload);
+    return response.data;
+}
+
+/**
+ * Fetches an interview session by ID for resuming progress
+ * @param {string} sessionId
+ * @returns {Promise<Object>}
+ */
+export async function getInterviewSession(sessionId) {
+    const response = await api.get(`/api/interview/session/${sessionId}`);
+    return response.data;
+}
+
+/**
+ * Fetches consolidated dashboard overview data for the authenticated user
+ * @returns {Promise<Object>}
+ */
+export async function getDashboardOverview() {
+    const response = await api.get('/api/dashboard/overview');
     return response.data;
 }
 
@@ -115,4 +140,6 @@ export default {
     analyzeResumeMatch,
     startInterviewSession,
     evaluateInterviewAnswer,
+    getInterviewSession,
+    getDashboardOverview,
 };

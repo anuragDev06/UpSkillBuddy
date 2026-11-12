@@ -4,7 +4,9 @@ const tokenBlackListModel = require('../models/blacklist.model')
 
 async function authUser ( req, res , next ) {    
 
-    const token = req.cookies.token 
+    const authHeader = req.headers.authorization;
+    const bearerToken = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+    const token = req.cookies.token || bearerToken;
 
     if(!token) {
         return res.status(401).json({
@@ -25,6 +27,9 @@ async function authUser ( req, res , next ) {
     try{
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
         req.user = decoded;
+        if (decoded.id && !decoded._id) {
+            req.user._id = decoded.id;
+        }
         next()
     }catch(err){
         return res.status(401).json({

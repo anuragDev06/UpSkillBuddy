@@ -1,6 +1,7 @@
-import React, { useState, useRef, useCallback } from "react";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { useSearchParams } from "react-router";
 import FeatureAccessLimiter from "../components/FeatureAccessLimiter/FeatureAccessLimiter";
-import { startInterviewSession, evaluateInterviewAnswer } from "../services/ats.api.js";
+import { startInterviewSession, evaluateInterviewAnswer, getInterviewSession } from "../services/ats.api.js";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VALID_EXTENSIONS = ["pdf", "docx", "txt"];
@@ -136,14 +137,32 @@ function FileDropzone({ file, onFile, onClear, error, isDragging, onDragOver, on
 function InterviewSession({ session, onReset }) {
     const questions = session?.data?.questions || [];
     const totalQuestions = questions.length;
+    const sessionId = session?.data?.sessionId || session?.sessionId;
 
-    const [currentIndex, setCurrentIndex]     = useState(0);
-    const [answer, setAnswer]                 = useState("");
+    // Restore any existing evaluations from saved session
+    const initialEvaluations = {};
+    questions.forEach((q, idx) => {
+        if (q.evaluation && typeof q.evaluation.score === 'number') {
+            initialEvaluations[idx] = q.evaluation;
+        }
+    });
+
+    const firstUnansweredIndex = questions.findIndex(
+        (q, idx) => !initialEvaluations[idx]
+    );
+    const resolvedInitialIndex = firstUnansweredIndex !== -1
+        ? firstUnansweredIndex
+        : (session?.data?.initialIndex ?? 0);
+
+    const isAllInitiallyDone = questions.length > 0 && Object.keys(initialEvaluations).length === questions.length;
+
+    const [currentIndex, setCurrentIndex]     = useState(resolvedInitialIndex);
+    const [answer, setAnswer]                 = useState(questions[resolvedInitialIndex]?.userAnswer || "");
     const [isEvaluating, setIsEvaluating]     = useState(false);
     const [evalError, setEvalError]           = useState("");
-    const [evaluations, setEvaluations]       = useState({}); // { [questionIndex]: evaluation }
+    const [evaluations, setEvaluations]       = useState(initialEvaluations);
     const [showHint, setShowHint]             = useState(false);
-    const [interviewDone, setInterviewDone]   = useState(false);
+    const [interviewDone, setInterviewDone]   = useState(isAllInitiallyDone);
 
     const currentQuestion = questions[currentIndex];
     const currentEval     = evaluations[currentIndex];
@@ -158,7 +177,9 @@ function InterviewSession({ session, onReset }) {
                 currentQuestion.question,
                 answer,
                 currentQuestion.type,
-                currentQuestion.difficulty
+                currentQuestion.difficulty,
+                sessionId,
+                currentIndex
             );
             setEvaluations(prev => ({ ...prev, [currentIndex]: result.data }));
         } catch (err) {
@@ -170,8 +191,9 @@ function InterviewSession({ session, onReset }) {
 
     const handleNext = () => {
         if (currentIndex < totalQuestions - 1) {
-            setCurrentIndex(i => i + 1);
-            setAnswer("");
+            const nextIndex = currentIndex + 1;
+            setCurrentIndex(nextIndex);
+            setAnswer(questions[nextIndex]?.userAnswer || "");
             setShowHint(false);
             setEvalError("");
         } else {
@@ -463,6 +485,12 @@ function InterviewSession({ session, onReset }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function Interview() {
+    // ── Resuming state ──
+    const [searchParams, setSearchParams]   = useSearchParams();
+    const resumeSessionId                   = searchParams.get("session");
+    const [isLoadingSession, setIsLoadingSession] = useState(false);
+    const [resumeLoadError, setResumeLoadError]   = useState("");
+
     // ── Resume ──
     const [resumeFile, setResumeFile]       = useState(null);
     const [resumeError, setResumeError]     = useState("");
@@ -488,6 +516,53 @@ export default function Interview() {
     const [isStarting, setIsStarting]       = useState(false);
     const [submitError, setSubmitError]     = useState("");
     const [session, setSession]             = useState(null);
+
+    // ── Check if user is resuming a session ──
+    useEffect(() => {
+        if (!resumeSessionId) return;
+
+        let isMounted = true;
+        setIsLoadingSession(true);
+        setResumeLoadError("");
+
+        getInterviewSession(resumeSessionId)
+            .then((res) => {
+                if (!isMounted) return;
+                if (res && res.success && res.data) {
+                    const fetched = res.data;
+                    setSession({
+                        sessionId: fetched._id,
+                        data: {
+                            sessionId: fetched._id,
+                            questions: fetched.questions || [],
+                            totalQuestions: fetched.totalQuestions || fetched.questions?.length || 0,
+                            config: {
+                                interviewType: fetched.interviewType,
+                                difficulty: fetched.difficulty,
+                                companyName: fetched.companyName || null,
+                            },
+                            initialIndex: fetched.currentIndex ?? 0,
+                            savedStatus: fetched.status,
+                            overallScore: fetched.overallScore,
+                        },
+                    });
+                } else {
+                    setResumeLoadError("Failed to load interview session.");
+                }
+            })
+            .catch((err) => {
+                if (!isMounted) return;
+                console.error("Error loading resume session:", err);
+                setResumeLoadError(err.response?.data?.message || "Could not find or resume the requested interview session.");
+            })
+            .finally(() => {
+                if (isMounted) setIsLoadingSession(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [resumeSessionId]);
 
     // ── Resume handlers ──
     const handleResumeFile = useCallback((file) => {
@@ -548,7 +623,19 @@ export default function Interview() {
         setJdText(""); setJdFile(null); setJdTextError(""); setJdFileError("");
         setCompanyName(""); setInterviewType("technical"); setDifficulty("mid"); setQuestionCount(5);
         setSubmitError(""); setSession(null);
+        if (resumeSessionId) {
+            setSearchParams({});
+        }
     };
+
+    if (isLoadingSession) {
+        return (
+            <div className="max-w-3xl mx-auto p-12 text-center space-y-4">
+                <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto" />
+                <p className="text-sm font-semibold text-slate-700">Resuming your interview session…</p>
+            </div>
+        );
+    }
 
     // ── If session is active, show the Interview Session UI ──
     if (session) {

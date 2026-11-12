@@ -29,12 +29,13 @@ const authRouter      = require('../routes/auth.routes');
 const atsRouter       = require('../routes/ats.routes');
 const matchRouter     = require('../routes/match.routes');
 const interviewRouter = require('../routes/interview.routes');
-
+const dashboardRouter = require('../routes/dashboard.routes');
 
 app.use('/api/auth',      authRouter);
 app.use('/api/ats',       atsRouter);
 app.use('/api/match',     matchRouter);
 app.use('/api/interview', interviewRouter);
+app.use('/api/dashboard', dashboardRouter);
 
 
 

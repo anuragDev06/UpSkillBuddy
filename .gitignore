@@ -31,11 +31,26 @@ Thumbs.db
 .vite/
 .eslintcache
 
-# ── Local test / sample files ─────────────────────────────────────────────────
+# ── Local test / sample files & testing tools ─────────────────────────────────
 test/
+tests/
 **/test/
+**/tests/
+__tests__/
 **/__tests__/
+__mocks__/
+**/__mocks__/
 *.test.js
 *.test.jsx
+*.test.ts
+*.test.tsx
 *.spec.js
 *.spec.jsx
+*.spec.ts
+*.spec.tsx
+*.test.*
+*.spec.*
+jest.config.*
+jest.setup.*
+coverage/
+.nyc_output/

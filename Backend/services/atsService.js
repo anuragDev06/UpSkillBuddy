@@ -2,7 +2,15 @@ const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const { GoogleGenAI } = require('@google/genai');
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Gemini Client — initialised once using the key from .env
+// ─────────────────────────────────────────────────────────────────────────────
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
+
 const RESUME_VALIDATION_RULES = {
     maxFileSize: MAX_FILE_SIZE_BYTES,
     minWords: 40,
@@ -105,7 +113,7 @@ function validateUploadedResumeFile(file) {
         return {
             isValid: false,
             code: 'EMPTY_DOCUMENT',
-            message: 'No resume file was uploaded.',
+            message: 'Please upload a valid file.',
             statusCode: 400,
         };
     }
@@ -329,10 +337,7 @@ async function validateResumeInput(file, resumeText) {
     return validateResumeText(extractionValidation.normalizedText);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Gemini Client — initialised once using the key from .env
-// ─────────────────────────────────────────────────────────────────────────────
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
 
 /**
  * Extract plain text from an uploaded file buffer based on MIME type or file extension.
@@ -386,6 +391,7 @@ async function extractTextFromFile(file) {
         throw createServiceError('TEXT_EXTRACTION_FAILED', 'Unable to read the uploaded resume file safely.');
     }
 }
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Prompt sent to Gemini — asks for a strict JSON response matching the
@@ -444,6 +450,8 @@ Scoring guidelines:
 - totalScore must equal the sum of all breakdown scores.
 - status should reflect totalScore: 85-100=Excellent, 70-84=Good, 50-69=Average, 30-49=Poor, 0-29=Critical.`;
 
+
+
 /**
  * Sends the extracted resume text to Gemini for ATS analysis and returns a
  * structured evaluation report matching the frontend's expected shape.
@@ -487,6 +495,8 @@ async function calculateAtsScore(resumeText) {
 
     return normalizeResult(parsed, resumeText);
 }
+
+
 
 /**
  * Ensures every required field exists in the Gemini response, filling in safe
