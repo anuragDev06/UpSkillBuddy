@@ -2,6 +2,33 @@ import React, { useState } from "react";
 import FeatureAccesLimiter from "../components/FeatureAccessLimiter/FeatureAccessLimiter";
 import { scanResumeFile, scanResumeText } from "../services/ats.api";
 
+// Helper to sanitize any technical/AI model error messages for end users
+const sanitizeErrorMessage = (errorMsg, status) => {
+    const fallback = "There's some technical error at our end. Try again later.";
+    if (!errorMsg || typeof errorMsg !== "string") {
+        return fallback;
+    }
+
+    const trimmed = errorMsg.trim();
+
+    // Check for JSON error payload (e.g., {"error":{"code":503,...}}) or array string
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        return fallback;
+    }
+
+    // Check for 5xx status or technical/model error keywords
+    const isTechnical =
+        (status && Number(status) >= 500) ||
+        status === 503 ||
+        /(503|500|unavailable|high demand|spikes in demand|overloaded|resource_exhausted|rate limit|quota|gemini|axioserror|econnrefused|internal server error|failed with status code)/i.test(trimmed);
+
+    if (isTechnical) {
+        return fallback;
+    }
+
+    return trimmed;
+};
+
 export default function ATSscore() {
     const [inputMode, setInputMode] = useState("file"); // "file" | "text"
     const [selectedFile, setSelectedFile] = useState(null);
@@ -80,12 +107,13 @@ export default function ATSscore() {
             if (response && response.success) {
                 setScanResult(response.data);
             } else {
-                setScanError(response?.message || "Failed to audit resume.");
+                setScanError(sanitizeErrorMessage(response?.message));
             }
         } catch (err) {
             console.error("Scan error:", err);
-            const serverMsg = err.response?.data?.message || "Error scanning resume. Please check your file and try again.";
-            setScanError(serverMsg);
+            const serverMsg = err.response?.data?.message || err.message;
+            const status = err.response?.status;
+            setScanError(sanitizeErrorMessage(serverMsg, status));
         } finally {
             setIsScanning(false);
         }

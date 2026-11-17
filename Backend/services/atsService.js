@@ -186,22 +186,32 @@ async function calculateAtsScore(resumeText) {
 
     const model = process.env.GEMINI_ATS_MODEL || 'gemini-3.6-flash';
 
-    const response = await genAI.models.generateContent({
-        model,
-        contents: [
-            {
-                role: 'user',
-                parts: [
-                    { text: SYSTEM_PROMPT },
-                    { text: `\n\nResume text to analyze:\n\n${resumeText.trim()}` },
-                ],
+    let response;
+    try {
+        response = await genAI.models.generateContent({
+            model,
+            contents: [
+                {
+                    role: 'user',
+                    parts: [
+                        { text: SYSTEM_PROMPT },
+                        { text: `\n\nResume text to analyze:\n\n${resumeText.trim()}` },
+                    ],
+                },
+            ],
+            config: {
+                responseMimeType: 'application/json',
+                temperature: 0.2,
             },
-        ],
-        config: {
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-        },
-    });
+        });
+    } catch (err) {
+        console.error('Gemini ATS score generation error:', err);
+        throw createServiceError(
+            'TECHNICAL_ERROR',
+            "There's some technical error at our end. Try again later.",
+            503
+        );
+    }
 
     const rawText = (typeof response?.text === 'function' ? response.text() : response?.text) ?? response?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
@@ -210,7 +220,11 @@ async function calculateAtsScore(resumeText) {
         const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
         parsed = JSON.parse(cleaned);
     } catch {
-        throw new Error('Gemini returned an unexpected response format. Please try again.');
+        throw createServiceError(
+            'TECHNICAL_ERROR',
+            "There's some technical error at our end. Try again later.",
+            500
+        );
     }
 
     return normalizeResult(parsed, resumeText);

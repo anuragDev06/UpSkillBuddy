@@ -99,9 +99,11 @@ async function startInterviewController(req, res) {
 
     } catch (error) {
         console.error('Error in startInterviewController:', error);
+        const rawMessage = error && error.message ? String(error.message).trim() : '';
+        const isTechnical = rawMessage.startsWith('{') || /(503|500|unavailable|high demand)/i.test(rawMessage);
         return res.status(500).json({
             success: false,
-            message: error.message || 'Failed to generate interview questions.',
+            message: isTechnical ? "There's some technical error at our end. Try again later." : (error.message || 'Failed to generate interview questions.'),
         });
     }
 }
@@ -173,9 +175,11 @@ async function evaluateAnswerController(req, res) {
 
     } catch (error) {
         console.error('Error in evaluateAnswerController:', error);
+        const rawMessage = error && error.message ? String(error.message).trim() : '';
+        const isTechnical = rawMessage.startsWith('{') || /(503|500|unavailable|high demand)/i.test(rawMessage);
         return res.status(500).json({
             success: false,
-            message: error.message || 'Failed to evaluate the answer.',
+            message: isTechnical ? "There's some technical error at our end. Try again later." : (error.message || 'Failed to evaluate the answer.'),
         });
     }
 }

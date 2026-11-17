@@ -3,6 +3,42 @@ const mongoose = require('mongoose');
 const ResumeScan = require('../models/resumeScan.model');
 
 /**
+ * Formats error message to prevent leaking raw technical or internal AI model errors to users.
+ */
+function formatSafeErrorMessage(error) {
+    if (!error) {
+        return "There's some technical error at our end. Try again later.";
+    }
+
+    const statusCode = error.statusCode || 500;
+    const rawMessage = typeof error === 'string' ? error : (error.message || '');
+    const trimmed = rawMessage.trim();
+
+    // Known user-facing validation errors from resume validation pipeline (4xx)
+    const isValidationCode = [
+        'EMPTY_DOCUMENT',
+        'INVALID_FORMAT',
+        'FILE_TOO_LARGE',
+        'CORRUPT_DOCUMENT',
+        'NOT_A_RESUME',
+        'INVALID_RESUME',
+        'RATE_LIMIT_EXCEEDED'
+    ].includes(error.code);
+
+    const isTechnicalSignature = (
+        trimmed.startsWith('{') ||
+        trimmed.startsWith('[') ||
+        /(503|500|unavailable|high demand|spikes in demand|overloaded|resource_exhausted|rate limit|quota|gemini|axioserror|econnrefused)/i.test(trimmed)
+    );
+
+    if (statusCode >= 400 && statusCode < 500 && isValidationCode && !isTechnicalSignature && trimmed) {
+        return trimmed;
+    }
+
+    return "There's some technical error at our end. Try again later.";
+}
+
+/**
  * Controller to process resume file or text input and return ATS score evaluation
  */
 async function scanResumeController(req, res) {
@@ -61,12 +97,14 @@ async function scanResumeController(req, res) {
 
     } catch (error) {
         console.error('Error in scanResumeController:', error);
-        const code = error && error.code ? error.code : 'RESUME_VALIDATION_FAILED';
-        const statusCode = error && error.statusCode ? error.statusCode : 500;
+        const rawMessage = error && error.message ? String(error.message).trim() : '';
+        const isUnavailable = /(503|unavailable|high demand|spikes in demand)/i.test(rawMessage);
+        const statusCode = isUnavailable ? 503 : (error && error.statusCode ? error.statusCode : 500);
+        const code = error && error.code && !rawMessage.startsWith('{') ? error.code : 'TECHNICAL_ERROR';
 
         return res.status(statusCode).json({
             success: false,
-            message: error.message || 'An error occurred while processing the resume.',
+            message: formatSafeErrorMessage(error),
             code,
         });
     }

@@ -6,6 +6,30 @@ import { analyzeResumeMatch } from "../services/ats.api";
 const VALID_EXTENSIONS = ["pdf", "docx", "txt"];
 const MAX_SIZE_MB = 5;
 
+const sanitizeErrorMessage = (errorMsg, status) => {
+    const fallback = "There's some technical error at our end. Try again later.";
+    if (!errorMsg || typeof errorMsg !== "string") {
+        return fallback;
+    }
+
+    const trimmed = errorMsg.trim();
+
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        return fallback;
+    }
+
+    const isTechnical =
+        (status && Number(status) >= 500) ||
+        status === 503 ||
+        /(503|500|unavailable|high demand|spikes in demand|overloaded|resource_exhausted|rate limit|quota|gemini|axioserror|econnrefused|internal server error|failed with status code)/i.test(trimmed);
+
+    if (isTechnical) {
+        return fallback;
+    }
+
+    return trimmed;
+};
+
 function validateFile(file) {
     const ext = file.name.split(".").pop().toLowerCase();
     if (!VALID_EXTENSIONS.includes(ext)) {
@@ -304,7 +328,9 @@ export default function MatchScore() {
             if (!data.success) throw new Error(data.message || 'Analysis failed.');
             setResult(data.data);
         } catch (err) {
-            setSubmitError(err.response?.data?.message || err.message || 'Analysis failed. Please try again.');
+            const serverMsg = err.response?.data?.message || err.message;
+            const status = err.response?.status;
+            setSubmitError(sanitizeErrorMessage(serverMsg, status));
         } finally {
             setIsAnalyzing(false);
         }

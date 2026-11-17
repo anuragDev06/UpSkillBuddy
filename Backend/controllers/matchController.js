@@ -57,9 +57,14 @@ async function matchResumeController(req, res) {
 
     } catch (error) {
         console.error('Error in matchResumeController:', error);
-        return res.status(500).json({
+        const rawMessage = error && error.message ? String(error.message).trim() : '';
+        const isUnavailable = /(503|unavailable|high demand|spikes in demand)/i.test(rawMessage);
+        const statusCode = isUnavailable ? 503 : (error && error.statusCode ? error.statusCode : 500);
+
+        return res.status(statusCode).json({
             success: false,
-            message: error.message || 'An error occurred while analyzing the match.',
+            message: "There's some technical error at our end. Try again later.",
+            code: 'TECHNICAL_ERROR',
         });
     }
 }
